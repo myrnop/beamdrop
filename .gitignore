@@ -1,3 +1,8 @@
 .flatpak-builder/
 build-dir/
 __pycache__/
+repo/
+dist/
+pkg-build/
+pkg-root/
+pkg-deb/
