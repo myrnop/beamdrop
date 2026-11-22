@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.myrnop.BeamDrop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>BeamDrop</name>
+  <summary>Instant local Wi-Fi file sharing via QR code</summary>
+  <description>
+    <p>
+      BeamDrop lets you send and receive files, folders, and text snippets between your Linux desktop and any phone or tablet on your local Wi-Fi network without cables, cloud accounts, or companion apps.
+    </p>
+    <ul>
+      <li>Generate instant QR codes to download files or zipped folders directly onto your phone</li>
+      <li>Switch to Receive Mode to upload photos and files from your phone to Downloads</li>
+      <li>Exchange text snippets and links bidirectionally between desktop and phone</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.myrnop.BeamDrop.desktop</launchable>
+  <url type="homepage">https://github.com/myrnop/beamdrop</url>
+  <url type="bugtracker">https://github.com/myrnop/beamdrop/issues</url>
+  <developer id="io.github.myrnop">
+    <name>MyrnChef</name>
+  </developer>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2026-11-22">
+      <description>
+        <p>Initial release of BeamDrop.</p>
+      </description>
+    </release>
+  </releases>
+</component>

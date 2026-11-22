@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=BeamDrop
+Comment=Send and receive files over local Wi-Fi using QR codes
+Exec=beamdrop
+Icon=io.github.myrnop.BeamDrop
+Terminal=false
+Type=Application
+Categories=Utility;Network;FileTransfer;GTK;
+Keywords=QR;Share;Transfer;WiFi;LAN;AirDrop;Send;Receive;
+StartupNotify=true

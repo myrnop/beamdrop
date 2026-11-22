@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#62a0ea" />
+      <stop offset="100%" stop-color="#1c71d8" />
+    </linearGradient>
+
+    
+    <linearGradient id="edgeGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1a5fb4" />
+      <stop offset="15%" stop-color="#3584e4" />
+      <stop offset="85%" stop-color="#3584e4" />
+      <stop offset="100%" stop-color="#1a5fb4" />
+    </linearGradient>
+
+    
+    <radialGradient id="glowGrad" cx="50%" cy="42%" r="52%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+
+    
+    <filter id="glyphShadow" x="-15%" y="-15%" width="130%" height="135%">
+      <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#0d2b52" flood-opacity="0.38" />
+    </filter>
+  </defs>
+
+  
+  <rect x="14" y="18" width="100" height="100" rx="22" fill="#000000" opacity="0.16" />
+
+  
+  <rect x="14" y="16" width="100" height="100" rx="22" fill="url(#edgeGrad)" />
+
+  
+  <rect x="14" y="12" width="100" height="100" rx="22" fill="url(#bgGrad)" />
+
+  
+  <rect x="14" y="12" width="100" height="100" rx="22" fill="url(#glowGrad)" />
+
+  
+  <path d="M 36 12.75 L 92 12.75 A 21.25 21.25 0 0 1 113.25 34 L 113.25 36 A 21.25 21.25 0 0 0 92 14.25 L 36 14.25 A 21.25 21.25 0 0 0 14.75 36 L 14.75 34 A 21.25 21.25 0 0 1 36 12.75 Z" fill="#ffffff" opacity="0.38" />
+
+  
+  <path d="M 41 37 A 32 32 0 0 1 87 37" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" opacity="0.45" />
+  <path d="M 49 46 A 21 21 0 0 1 79 46" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" opacity="0.75" />
+
+  
+  <g filter="url(#glyphShadow)">
+    
+    <path d="M 64 49 L 47 66 C 45.2 67.8 46.5 71 49 71 L 57 71 L 57 84 C 57 86.2 58.8 88 61 88 L 67 88 C 69.2 88 71 86.2 71 84 L 71 71 L 79 71 C 81.5 71 82.8 67.8 81 66 Z" fill="#ffffff" />
+
+    
+    <rect x="36" y="93" width="56" height="7" rx="3.5" fill="#ffffff" />
+    <rect x="34" y="34" width="10" height="10" rx="2.5" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.7" />
+    <rect x="84" y="34" width="10" height="10" rx="2.5" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.7" />
+  </g>
+</svg>

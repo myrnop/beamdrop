@@ -1,0 +1,31 @@
+app-id: io.github.myrnop.BeamDrop
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: beamdrop
+
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --filesystem=xdg-download
+  - --filesystem=~/.local/share/beamdrop:ro
+
+modules:
+  - name: python3-qrcode
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/lib/python3.14/site-packages
+      - cp -r qrcode /app/lib/python3.14/site-packages 
+    sources:
+      - type: git
+        url: https://github.com/lincolnloop/python-qrcode.git
+        tag: v8.2
+
+  - name: beamdrop
+    buildsystem: meson
+    sources:
+      - type: dir
+        path: .
