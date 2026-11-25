@@ -1,9 +1,9 @@
 from pathlib import Path
 import secrets
+import datetime
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-import datetime
 from gi.repository import Gtk, Adw, Gio, Gdk, GLib
 
 from .qr_utils import get_local_lan_ip, make_qr_picture
@@ -11,58 +11,99 @@ from .server import BeamHttpServer, APK_PATH
 
 
 APP_CSS = """
-button, .qr-pass, .network-badge, .drop-zone {
-    transition: all 220ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+@keyframes pulse-glow {
+    0%   { box-shadow: 0 0 0 0 alpha(#3584e4, 0.25); }
+    50%  { box-shadow: 0 0 0 6px alpha(#3584e4, 0.0); }
+    100% { box-shadow: 0 0 0 0 alpha(#3584e4, 0.0); }
+}
+
+@keyframes pulse-glow-green {
+    0%   { box-shadow: 0 0 0 0 alpha(#2ec27e, 0.30); }
+    50%  { box-shadow: 0 0 0 6px alpha(#2ec27e, 0.0); }
+    100% { box-shadow: 0 0 0 0 alpha(#2ec27e, 0.0); }
+}
+
+@keyframes float-icon {
+    0%   { transform: translateY(0px); }
+    50%  { transform: translateY(-4px); }
+    100% { transform: translateY(0px); }
+}
+
+button, .qr-pass, .network-badge, .drop-zone, row {
+    transition: all 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 button.pill:hover {
-    transform: translateY(-1px);
+    transform: translateY(-1.5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+button.pill:active {
+    transform: translateY(0px) scale(0.98);
 }
 
 .qr-pass {
     background-color: #ffffff;
-    border-radius: 22px;
+    border-radius: 24px;
     padding: 18px;
-    border: 3px solid alpha(#3584e4, 0.35);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+    border: 3px solid alpha(#3584e4, 0.38);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+.qr-pass:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.24);
 }
 .qr-pass.mode-receive {
-    border-color: alpha(#2ec27e, 0.45);
+    border-color: alpha(#2ec27e, 0.48);
 }
 .qr-pass.mode-text {
-    border-color: alpha(#9141ac, 0.45);
+    border-color: alpha(#9141ac, 0.48);
 }
 
 .network-badge {
-    background-color: alpha(#3584e4, 0.16);
+    background-color: alpha(#3584e4, 0.15);
     color: #3584e4;
-    border: 1px solid alpha(#3584e4, 0.28);
+    border: 1px solid alpha(#3584e4, 0.30);
     border-radius: 999px;
-    padding: 5px 14px;
+    padding: 6px 16px;
     font-weight: 700;
     font-size: 0.85em;
+    font-variant-numeric: tabular-nums;
+    animation: pulse-glow 2.8s infinite ease-out;
 }
 .network-badge.mode-receive, .network-badge.device-connected {
     background-color: alpha(#2ec27e, 0.16);
     color: #26a269;
-    border-color: alpha(#2ec27e, 0.35);
+    border-color: alpha(#2ec27e, 0.38);
+    animation: pulse-glow-green 2.8s infinite ease-out;
 }
 .network-badge.mode-text {
     background-color: alpha(#9141ac, 0.16);
     color: #9141ac;
-    border-color: alpha(#9141ac, 0.32);
+    border-color: alpha(#9141ac, 0.35);
+    animation: none;
 }
 
 .drop-zone {
-    background: linear-gradient(180deg, alpha(#3584e4, 0.10) 0%, alpha(#62a0ea, 0.03) 100%);
-    border: 2px dashed alpha(#3584e4, 0.35);
-    border-radius: 24px;
-    padding: 12px;
+    background: linear-gradient(180deg, alpha(#3584e4, 0.11) 0%, alpha(#62a0ea, 0.03) 100%);
+    border: 2px dashed alpha(#3584e4, 0.38);
+    border-radius: 26px;
+    padding: 14px;
+}
+.drop-zone:hover {
+    border-color: alpha(#3584e4, 0.65);
+    background: linear-gradient(180deg, alpha(#3584e4, 0.15) 0%, alpha(#62a0ea, 0.05) 100%);
 }
 .drop-zone.drag-hover {
-    background: linear-gradient(180deg, alpha(#3584e4, 0.22) 0%, alpha(#62a0ea, 0.10) 100%);
+    background: linear-gradient(180deg, alpha(#3584e4, 0.25) 0%, alpha(#62a0ea, 0.12) 100%);
     border-color: #3584e4;
-    transform: scale(1.015);
+    border-style: solid;
+    transform: scale(1.018);
+    box-shadow: 0 12px 30px alpha(#3584e4, 0.22);
+}
+
+.drop-zone statuspage image {
+    animation: float-icon 3.2s ease-in-out infinite;
 }
 
 .btn-receive {
@@ -93,27 +134,40 @@ button.pill:hover {
 .text-card {
     padding: 4px;
 }
+
+.transfer-progress progress, .transfer-progress trough {
+    min-height: 6px;
+    border-radius: 999px;
+}
+
+.tabular-stats {
+    font-variant-numeric: tabular-nums;
+}
 """
 
 
-def _calculate_total_bytes(paths: list[Path]) -> int:
-    total = 0
-    for p in paths:
-        if p.is_file():
-            total += p.stat().st_size
-        elif p.is_dir():
-            for f in p.rglob("*"):
-                if f.is_file():
-                    total += f.stat().st_size
-    return total
+def _format_size(num_bytes: int) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if num_bytes < 1024.0:
+            return f"{num_bytes:.0f} {unit}" if unit == "B" else f"{num_bytes:.1f} {unit}"
+        num_bytes /= 1024.0
+    return f"{num_bytes:.1f} TB"
+
+
+def _calculate_path_bytes(path: Path) -> int:
+    if path.is_file():
+        return path.stat().st_size
+    if path.is_dir():
+        return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+    return 0
 
 
 class BeamDropWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.set_title("BeamDrop")
-        self.set_default_size(490, 740)
-        self.set_size_request(380, 560)
+        self.set_default_size(530, 760)
+        self.set_size_request(360, 560)
 
         self._load_css()
 
@@ -131,7 +185,7 @@ class BeamDropWindow(Adw.ApplicationWindow):
         toolbar_view = Adw.ToolbarView()
         self.toast_overlay.set_child(toolbar_view)
 
-        # --- HeaderBar with Always-Visible ViewSwitcher ---
+        # --- HeaderBar with Responsive ViewSwitcher ---
         header = Adw.HeaderBar()
         toolbar_view.add_top_bar(header)
 
@@ -144,9 +198,17 @@ class BeamDropWindow(Adw.ApplicationWindow):
         )
         header.set_title_widget(switcher)
 
+        bottom_switcher = Adw.ViewSwitcherBar(stack=self.stack)
+        toolbar_view.add_bottom_bar(bottom_switcher)
+
+        bp = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 470sp"))
+        bp.add_setter(switcher, "visible", False)
+        bp.add_setter(bottom_switcher, "reveal", True)
+        self.add_breakpoint(bp)
+
         regen_btn = Gtk.Button(
             icon_name="view-refresh-symbolic",
-            tooltip_text="Generate New Session Token",
+            tooltip_text="Generate New Session Token (Ctrl+R)",
         )
         regen_btn.connect("clicked", self._on_regenerate_token)
         header.pack_end(regen_btn)
@@ -163,12 +225,13 @@ class BeamDropWindow(Adw.ApplicationWindow):
         )
         header.pack_end(menu_btn)
         self._setup_actions()
+        self._setup_shortcuts()
 
         # --- Scrollable Clamped Layout ---
         scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
         toolbar_view.set_content(scroll)
 
-        clamp = Adw.Clamp(maximum_size=460, tightening_threshold=360)
+        clamp = Adw.Clamp(maximum_size=480, tightening_threshold=360)
         scroll.set_child(clamp)
 
         main_box = Gtk.Box(
@@ -177,7 +240,7 @@ class BeamDropWindow(Adw.ApplicationWindow):
         )
         clamp.set_child(main_box)
 
-        # Dynamic Status Pill (shows Wi-Fi IP:Port or Connected Android Device)
+        # Dynamic Status Pill
         self.net_pill = Gtk.Label(
             label=f"●  Wi-Fi Active  •  {self.lan_ip}:{self.server.port}",
             halign=Gtk.Align.CENTER,
@@ -185,20 +248,54 @@ class BeamDropWindow(Adw.ApplicationWindow):
         self.net_pill.add_css_class("network-badge")
         main_box.append(self.net_pill)
 
-        # --- Connected Android Devices Section ---
-        self.devices_group = Adw.PreferencesGroup(
-            title="Connected Devices",
-            visible=False,
+        # --- Animated Connected Android Devices Section ---
+        self.devices_revealer = Gtk.Revealer(
+            transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN,
+            transition_duration=260,
+            reveal_child=False,
         )
-        main_box.append(self.devices_group)
+        self.devices_group = Adw.PreferencesGroup(title="Connected Devices")
+        self.devices_revealer.set_child(self.devices_group)
+        main_box.append(self.devices_revealer)
+
+        # --- Animated Live Transfer Progress Card ---
+        self.progress_revealer = Gtk.Revealer(
+            transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN,
+            transition_duration=240,
+            reveal_child=False,
+        )
+        self.progress_group = Adw.PreferencesGroup(title="Active Transfer")
+        self.progress_row = Adw.ActionRow(title="Transferring…", subtitle="0.0 MB/s")
+        self.progress_row.add_css_class("tabular-stats")
+        self.progress_icon = Gtk.Image.new_from_icon_name("document-send-symbolic")
+        self.progress_row.add_prefix(self.progress_icon)
+
+        self.progress_bar = Gtk.ProgressBar(valign=Gtk.Align.CENTER, width_request=120)
+        self.progress_bar.add_css_class("transfer-progress")
+        self.progress_row.add_suffix(self.progress_bar)
+        self.progress_group.add(self.progress_row)
+        self.progress_revealer.set_child(self.progress_group)
+        main_box.append(self.progress_revealer)
+
+        spring_target = Adw.PropertyAnimationTarget.new(self.progress_bar, "fraction")
+        self.progress_anim = Adw.SpringAnimation.new(
+            self.progress_bar, 0.0, 0.0,
+            Adw.SpringParams.new(1.0, 0.4, 220.0),
+            spring_target,
+        )
 
         main_box.append(self.stack)
 
         # --- Page 1: Send Files & Folders ---
-        self.send_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        self.send_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self.send_box.set_valign(Gtk.Align.CENTER)
         self.send_box.add_css_class("drop-zone")
 
+        self.send_status_revealer = Gtk.Revealer(
+            transition_type=Gtk.RevealerTransitionType.CROSSFADE,
+            transition_duration=220,
+            reveal_child=True,
+        )
         self.send_status = Adw.StatusPage(
             icon_name="document-send-symbolic",
             title="Send Files or Folders",
@@ -207,25 +304,32 @@ class BeamDropWindow(Adw.ApplicationWindow):
         self.send_status.add_css_class("compact")
 
         btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, halign=Gtk.Align.CENTER)
-        pick_files_btn = Gtk.Button(label="Choose Files…")
+        pick_files_btn = Gtk.Button(label="Choose Files…", tooltip_text="Ctrl+O")
         pick_files_btn.add_css_class("suggested-action")
         pick_files_btn.add_css_class("pill")
         pick_files_btn.connect("clicked", self._on_pick_files)
         btn_row.append(pick_files_btn)
 
-        pick_folder_btn = Gtk.Button(label="Choose Folder…")
+        pick_folder_btn = Gtk.Button(label="Choose Folder…", tooltip_text="Ctrl+Shift+O")
         pick_folder_btn.add_css_class("pill")
         pick_folder_btn.connect("clicked", self._on_pick_folder)
         btn_row.append(pick_folder_btn)
 
         self.send_status.set_child(btn_row)
-        self.send_box.append(self.send_status)
+        self.send_status_revealer.set_child(self.send_status)
+        self.send_box.append(self.send_status_revealer)
 
+        self.send_qr_revealer = Gtk.Revealer(
+            transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN,
+            transition_duration=280,
+            reveal_child=False,
+        )
         self.send_qr_frame = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL, spacing=14,
-            halign=Gtk.Align.CENTER, visible=False,
+            halign=Gtk.Align.CENTER,
         )
-        self.send_box.append(self.send_qr_frame)
+        self.send_qr_revealer.set_child(self.send_qr_frame)
+        self.send_box.append(self.send_qr_revealer)
 
         drop_target = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
         drop_target.connect("enter", self._on_drag_enter)
@@ -355,6 +459,25 @@ class BeamDropWindow(Adw.ApplicationWindow):
         about_action.connect("activate", self._on_about)
         self.add_action(about_action)
 
+    def _setup_shortcuts(self):
+        controller = Gtk.ShortcutController()
+        controller.set_scope(Gtk.ShortcutScope.MANAGED)
+
+        shortcuts = [
+            ("<Control>o", lambda *_: self._on_pick_files()),
+            ("<Control><Shift>o", lambda *_: self._on_pick_folder()),
+            ("<Control>r", lambda *_: self._on_regenerate_token()),
+            ("<Alt>1", lambda *_: self.stack.set_visible_child_name("send")),
+            ("<Alt>2", lambda *_: self.stack.set_visible_child_name("receive")),
+            ("<Alt>3", lambda *_: self.stack.set_visible_child_name("text")),
+        ]
+        for accel, callback in shortcuts:
+            trigger = Gtk.ShortcutTrigger.parse_string(accel)
+            action = Gtk.CallbackAction.new(callback)
+            controller.add_shortcut(Gtk.Shortcut.new(trigger, action))
+
+        self.add_controller(controller)
+
     def _on_get_android_app(self, *_):
         dialog = Adw.Dialog(title="Get Android App", content_width=380, content_height=470)
         toolbar_view = Adw.ToolbarView()
@@ -407,7 +530,7 @@ class BeamDropWindow(Adw.ApplicationWindow):
             application_name="BeamDrop",
             application_icon="io.github.myrnop.BeamDrop",
             developer_name="MyrnChef",
-            version="0.1.0",
+            version="0.2.0",
             website="https://github.com/myrnop/beamdrop",
             issue_url="https://github.com/myrnop/beamdrop/issues",
             license_type=Gtk.License.GPL_3_0,
@@ -459,7 +582,7 @@ class BeamDropWindow(Adw.ApplicationWindow):
                 self.device_rows[key] = row
 
         has_devices = bool(self.device_rows)
-        self.devices_group.set_visible(has_devices)
+        self.devices_revealer.set_reveal_child(has_devices)
         if not has_devices and self.connected_device is not None:
             self.connected_device = None
             self._update_status_badge()
@@ -639,6 +762,11 @@ class BeamDropWindow(Adw.ApplicationWindow):
                 return True
         return False
 
+    def _clear_shared_paths(self, *_):
+        self.server.shared_paths = []
+        self.send_qr_revealer.set_reveal_child(False)
+        self.send_status_revealer.set_reveal_child(True)
+
     def _set_shared_paths(self, paths: list[Path], switch_tab: bool = True):
         valid_paths = [p for p in paths if p.exists()]
         if not valid_paths:
@@ -648,23 +776,47 @@ class BeamDropWindow(Adw.ApplicationWindow):
         self.server.shared_paths = valid_paths
         if switch_tab:
             self.server.mode = "send"
-        self.send_status.set_visible(False)
-        self.send_qr_frame.set_visible(True)
 
-        size_mb = _calculate_total_bytes(valid_paths) / (1024 * 1024)
+        self.send_status_revealer.set_reveal_child(False)
+        self.send_qr_revealer.set_reveal_child(True)
+
+        total_size = sum(_calculate_path_bytes(p) for p in valid_paths)
+        size_str = _format_size(total_size)
+
         if len(valid_paths) == 1 and valid_paths[0].is_file():
             title_txt = valid_paths[0].name
-            sub_txt = f"Single file  •  {size_mb:.1f} MB"
+            sub_txt = f"Single file  •  {size_str}"
         elif len(valid_paths) == 1 and valid_paths[0].is_dir():
             title_txt = f"{valid_paths[0].name}.zip"
-            sub_txt = f"Folder ZIP stream  •  {size_mb:.1f} MB"
+            sub_txt = f"Folder ZIP stream  •  {size_str}"
         else:
             title_txt = f"{len(valid_paths)} items as ZIP"
-            sub_txt = f"Multi-file ZIP stream  •  {size_mb:.1f} MB"
+            sub_txt = f"Multi-file ZIP stream  •  {size_str}"
 
-        self._render_qr_card(self.send_qr_frame, self._current_url(), title_txt, sub_txt, mode="send", qr_size=200)
+        self._render_qr_card(self.send_qr_frame, self._current_url(), title_txt, sub_txt, mode="send", qr_size=195)
 
-        reset_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8, halign=Gtk.Align.CENTER)
+        # Expandable queue preview for multi-item or folder selections
+        if len(valid_paths) > 1 or valid_paths[0].is_dir():
+            queue_group = Adw.PreferencesGroup(width_request=320)
+            expander = Adw.ExpanderRow(
+                title="Queued Items",
+                subtitle=f"{len(valid_paths)} item(s)  •  {size_str}",
+            )
+            expander.add_prefix(Gtk.Image.new_from_icon_name("folder-visiting-symbolic"))
+            for p in valid_paths[:15]:
+                item_row = Adw.ActionRow(
+                    title=p.name,
+                    subtitle=_format_size(_calculate_path_bytes(p)),
+                )
+                item_icon = Gtk.Image.new_from_icon_name(
+                    "folder-symbolic" if p.is_dir() else "text-x-generic-symbolic"
+                )
+                item_row.add_prefix(item_icon)
+                expander.add_row(item_row)
+            queue_group.add(expander)
+            self.send_qr_frame.append(queue_group)
+
+        reset_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, halign=Gtk.Align.CENTER)
         files_btn = Gtk.Button(label="Change Files…")
         files_btn.add_css_class("flat")
         files_btn.connect("clicked", self._on_pick_files)
@@ -675,10 +827,44 @@ class BeamDropWindow(Adw.ApplicationWindow):
         folder_btn.connect("clicked", self._on_pick_folder)
         reset_box.append(folder_btn)
 
+        clear_btn = Gtk.Button(icon_name="edit-clear-symbolic", tooltip_text="Clear Selection")
+        clear_btn.add_css_class("flat")
+        clear_btn.connect("clicked", self._clear_shared_paths)
+        reset_box.append(clear_btn)
+
         self.send_qr_frame.append(reset_box)
+
+    def _animate_progress_to(self, target_fraction: float):
+        current = self.progress_bar.get_fraction()
+        self.progress_anim.set_value_from(current)
+        self.progress_anim.set_value_to(target_fraction)
+        self.progress_anim.play()
 
     def _on_transfer_event(self, record: dict):
         direction = record["direction"]
+
+        if direction == "progress":
+            name = record["name"]
+            frac = record["fraction"]
+            speed = record["speed_mbps"]
+            done = record["done"]
+            sub_dir = record["sub_direction"]
+
+            self.progress_row.set_title(name)
+            pct = int(frac * 100)
+            speed_str = f"{speed:.1f} MB/s  •  {pct}%" if speed > 0 else f"{pct}%"
+            self.progress_row.set_subtitle(speed_str)
+
+            self.progress_icon.set_from_icon_name(
+                "go-up-symbolic" if sub_dir == "sent" else "go-down-symbolic"
+            )
+            self.progress_revealer.set_reveal_child(True)
+            self._animate_progress_to(frac)
+
+            if done:
+                GLib.timeout_add(900, lambda: self.progress_revealer.set_reveal_child(False) or False)
+            return
+
         name = record["name"]
         timestamp = record["time"]
 

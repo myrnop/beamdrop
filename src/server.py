@@ -6,6 +6,7 @@ import os
 import secrets
 import socket
 import threading
+import time
 import urllib.parse
 import zipfile
 from email.parser import BytesParser
@@ -185,6 +186,18 @@ class BeamHttpServer:
         with self._lock:
             self.pending_pushes[device_key] = valid
 
+    def _emit_progress(self, transfer_id: str, direction: str, name: str, fraction: float, speed_mbps: float = 0.0, done: bool = False):
+        record = {
+            "direction": "progress",
+            "transfer_id": transfer_id,
+            "sub_direction": direction,
+            "name": name,
+            "fraction": max(0.0, min(1.0, fraction)),
+            "speed_mbps": speed_mbps,
+            "done": done,
+        }
+        GLib.idle_add(self.on_event_cb, record)
+
     def _emit_transfer(self, direction: str, name: str, target_path: Path | None = None, text_content: str | None = None):
         record = {
             "direction": direction,
@@ -194,6 +207,26 @@ class BeamHttpServer:
             "time": datetime.datetime.now().strftime("%H:%M"),
         }
         GLib.idle_add(self.on_event_cb, record)
+
+    def _stream_file_with_progress(self, fpath: Path, wfile, direction: str, display_name: str):
+        size = fpath.stat().st_size
+        tid = secrets.token_hex(4)
+        sent = 0
+        start_t = time.monotonic()
+        last_emit = 0.0
+
+        self._emit_progress(tid, direction, display_name, 0.0, 0.0, done=False)
+        with open(fpath, "rb") as f:
+            while chunk := f.read(1024 * 256):
+                wfile.write(chunk)
+                sent += len(chunk)
+                now = time.monotonic()
+                if now - last_emit >= 0.08 or sent >= size:
+                    elapsed = max(0.001, now - start_t)
+                    speed = (sent / (1024 * 1024)) / elapsed
+                    frac = (sent / size) if size > 0 else 1.0
+                    self._emit_progress(tid, direction, display_name, frac, speed, done=(sent >= size))
+                    last_emit = now
 
     def _start_udp_beacon(self, lan_ip: str):
         def beacon_loop():
@@ -252,7 +285,6 @@ class BeamHttpServer:
             def do_GET(self):
                 parsed = urllib.parse.urlparse(self.path)
 
-                # Public route for Android companion APK download
                 if parsed.path == "/app.apk":
                     if not APK_PATH.exists():
                         self.send_error(404, "BeamDrop.apk not found in ~/.local/share/beamdrop/")
@@ -263,16 +295,13 @@ class BeamHttpServer:
                     self.send_header("Content-Length", str(size))
                     self.send_header("Content-Disposition", 'attachment; filename="BeamDrop.apk"')
                     self.end_headers()
-                    with open(APK_PATH, "rb") as f:
-                        while chunk := f.read(1024 * 256):
-                            self.wfile.write(chunk)
+                    server_ref._stream_file_with_progress(APK_PATH, self.wfile, "sent", "BeamDrop.apk")
                     server_ref._emit_transfer("sent", "BeamDrop.apk", target_path=APK_PATH)
                     return
 
                 if not self._check_token():
                     return
 
-                # Android companion handshake & state check
                 if parsed.path == "/ping":
                     params = urllib.parse.parse_qs(parsed.query)
                     device_name = params.get("device", ["Android Device"])[0]
@@ -297,7 +326,6 @@ class BeamHttpServer:
                     })
                     return
 
-                # Direct push download for a specific Android device
                 if parsed.path == "/push-download":
                     params = urllib.parse.parse_qs(parsed.query)
                     device_name = params.get("device", ["Android Device"])[0]
@@ -320,9 +348,7 @@ class BeamHttpServer:
                         self.send_header("Content-Length", str(size))
                         self.send_header("Content-Disposition", f"attachment; filename*=UTF-8''{quoted_name}")
                         self.end_headers()
-                        with open(fpath, "rb") as f:
-                            while chunk := f.read(1024 * 256):
-                                self.wfile.write(chunk)
+                        server_ref._stream_file_with_progress(fpath, self.wfile, "sent", f"{fpath.name} → {device_name}")
                         server_ref._emit_transfer("sent", f"{fpath.name} → {device_name}", target_path=fpath)
                         return
 
@@ -339,9 +365,12 @@ class BeamHttpServer:
                     self.end_headers()
                     self.close_connection = True
                     stream_buf = HttpStreamBuffer(self.wfile)
+                    tid = secrets.token_hex(4)
+                    total_entries = len(entries)
                     with zipfile.ZipFile(stream_buf, mode="w", compression=zipfile.ZIP_STORED, allowZip64=True) as zf:
-                        for full_path, arcname in entries:
+                        for idx, (full_path, arcname) in enumerate(entries, 1):
                             zf.write(full_path, arcname=arcname)
+                            server_ref._emit_progress(tid, "sent", f"{zip_name} → {device_name}", idx / total_entries, done=(idx == total_entries))
                     stream_buf.flush()
                     server_ref._emit_transfer("sent", f"{zip_name} → {device_name}", target_path=paths[0])
                     return
@@ -372,10 +401,7 @@ class BeamHttpServer:
                     self.send_header("Content-Disposition", f"attachment; filename*=UTF-8''{quoted_name}")
                     self.end_headers()
 
-                    with open(fpath, "rb") as f:
-                        while chunk := f.read(1024 * 256):
-                            self.wfile.write(chunk)
-
+                    server_ref._stream_file_with_progress(fpath, self.wfile, "sent", fpath.name)
                     server_ref._emit_transfer("sent", fpath.name, target_path=fpath)
                     return
 
@@ -395,9 +421,12 @@ class BeamHttpServer:
                 self.close_connection = True
 
                 stream_buf = HttpStreamBuffer(self.wfile)
+                tid = secrets.token_hex(4)
+                total_entries = len(entries)
                 with zipfile.ZipFile(stream_buf, mode="w", compression=zipfile.ZIP_STORED, allowZip64=True) as zf:
-                    for full_path, arcname in entries:
+                    for idx, (full_path, arcname) in enumerate(entries, 1):
                         zf.write(full_path, arcname=arcname)
+                        server_ref._emit_progress(tid, "sent", zip_name, idx / total_entries, done=(idx == total_entries))
                 stream_buf.flush()
 
                 server_ref._emit_transfer("sent", f"{zip_name} ({len(entries)} files)", target_path=paths[0])
@@ -409,9 +438,35 @@ class BeamHttpServer:
                 parsed = urllib.parse.urlparse(self.path)
                 content_length = int(self.headers.get("Content-Length", 0))
                 content_type = self.headers.get("Content-Type", "")
-                raw_body = self.rfile.read(content_length)
 
-                # Allow Android companion to send text regardless of active desktop tab
+                tid = secrets.token_hex(4)
+                chunks = []
+                read_bytes = 0
+                start_t = time.monotonic()
+                last_emit = 0.0
+                if content_length > 65536 and server_ref.mode != "text" and parsed.path != "/text":
+                    server_ref._emit_progress(tid, "received", "Incoming upload…", 0.0, 0.0, done=False)
+
+                while read_bytes < content_length:
+                    to_read = min(1024 * 256, content_length - read_bytes)
+                    chunk = self.rfile.read(to_read)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    read_bytes += len(chunk)
+                    if content_length > 65536 and server_ref.mode != "text" and parsed.path != "/text":
+                        now = time.monotonic()
+                        if now - last_emit >= 0.08 or read_bytes >= content_length:
+                            elapsed = max(0.001, now - start_t)
+                            speed = (read_bytes / (1024 * 1024)) / elapsed
+                            server_ref._emit_progress(
+                                tid, "received", "Incoming upload…",
+                                read_bytes / content_length, speed, done=(read_bytes >= content_length)
+                            )
+                            last_emit = now
+
+                raw_body = b"".join(chunks)
+
                 if server_ref.mode == "text" or parsed.path == "/text":
                     parsed_form = urllib.parse.parse_qs(raw_body.decode("utf-8", errors="replace"))
                     snippet = parsed_form.get("snippet", [""])[0].strip()
@@ -421,7 +476,6 @@ class BeamHttpServer:
                     self._send_html(_render_text_page_html(server_ref.shared_text, status_banner="Sent to desktop!"))
                     return
 
-                # Allow Android companion to upload files via /upload or when in receive mode
                 if server_ref.mode != "receive" and parsed.path != "/upload":
                     self.send_error(403, "Upload not enabled")
                     return
